@@ -1,0 +1,11 @@
+{
+  "_nota": "EXEMPLO. Os IDs/bits abaixo são placeholders até haver captura real do teu carro. Preenche com o que descobrires.",
+  "messages": [
+    {
+      "id": "0x201", "name": "ENGINE_EXAMPLE", "dlc": 8,
+      "signals": [
+        {"name": "RPM", "start": 7, "length": 16, "byte_order": "big", "factor": 0.25, "unit": "rpm"}
+      ]
+    }
+  ]
+}
