@@ -70,6 +70,35 @@ def cmd_scan(a):
     scan(a.channel, a.bustype, a.bitrate, a.seconds)
 
 
+def _open_link(a):
+    from . import diag
+    if a.link == "can":
+        return diag.CanLink.open(a.channel, a.bustype, a.bitrate)
+    return diag.KLineLink(a.port, a.init)
+
+
+def cmd_diag(a):
+    from . import diag
+    link = _open_link(a)
+    try:
+        if a.action in ("dtc", "pending", "permanent"):
+            svc = {"dtc": 0x03, "pending": 0x07, "permanent": 0x0A}[a.action]
+            codes = diag.read_dtcs(link, svc)
+            print("\n".join(codes) if codes else "Sem códigos.")
+        elif a.action == "clear":
+            print("Códigos atuais:", diag.read_dtcs(link) or "nenhum")
+            if input("Apagar códigos e repor monitores de prontidão? [s/N] ").lower() == "s":
+                diag.clear_dtcs(link); print("Apagado.")
+        elif a.action == "vin":
+            print(diag.read_vin(link))
+        elif a.action == "live":
+            pids = [int(p, 0) for p in a.pids.split(",")]
+            diag.live(link, pids, a.seconds)
+    finally:
+        getattr(getattr(link, "bus", None) or getattr(link, "s", None), "shutdown", lambda: None)()
+        getattr(getattr(link, "s", None), "close", lambda: None)()
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="corsacan")
     sp = p.add_subparsers(required=True)
@@ -87,6 +116,14 @@ def main(argv=None):
     s.add_argument("--channel", default="can0"); s.add_argument("--bustype", default="socketcan")
     s.add_argument("--bitrate", type=int, default=500000); s.add_argument("--seconds", type=float, default=20)
     s.set_defaults(f=cmd_scan)
+    s = sp.add_parser("diag", help="diagnóstico: dtc|pending|permanent|clear|vin|live")
+    s.add_argument("action", choices=["dtc", "pending", "permanent", "clear", "vin", "live"])
+    s.add_argument("--link", choices=["can", "kline"], default="can")
+    s.add_argument("--channel", default="can0"); s.add_argument("--bustype", default="socketcan")
+    s.add_argument("--bitrate", type=int, default=500000)
+    s.add_argument("--port", default="/dev/ttyUSB0"); s.add_argument("--init", choices=["fast", "slow"], default="fast")
+    s.add_argument("--pids", default="0x0C,0x0D,0x05,0x04"); s.add_argument("--seconds", type=float, default=30)
+    s.set_defaults(f=cmd_diag)
     a = p.parse_args(argv)
     a.f(a)
 

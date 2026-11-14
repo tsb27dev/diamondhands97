@@ -31,11 +31,17 @@ def build_request(pid: int, mode: int = 0x01) -> bytes:
 
 
 def decode_response(data: bytes):
-    """Single-frame Mode 01. Devolve (pid, nome, valor, unidade) ou None."""
+    """Single-frame CAN Mode 01 (com byte de comprimento). Devolve (pid, nome, valor, unidade) ou None."""
     if len(data) < 4 or data[1] != 0x41:
         return None
-    n, pid = data[0], data[2]
-    payload = data[3 : 1 + n]
+    return decode_payload(data[1 : 1 + data[0]])
+
+
+def decode_payload(msg: bytes):
+    """Payload UDS/OBD já sem framing: 41 <pid> <dados...>."""
+    if len(msg) < 3 or msg[0] != 0x41:
+        return None
+    pid, payload = msg[1], msg[2:]
     if pid in PIDS:
         name, unit, fn = PIDS[pid]
         try:

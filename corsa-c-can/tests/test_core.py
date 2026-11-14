@@ -36,3 +36,50 @@ def test_obd():
     assert obd.decode_response(bytes([4, 0x41, 0x0C, 0x1A, 0xF8, 0, 0, 0]))[2] == 1726.0
     assert obd.decode_response(bytes([3, 0x41, 0x05, 0x5A, 0, 0, 0, 0]))[2] == 50
     assert obd.supported_pids(bytes([6, 0x41, 0x00, 0x18, 0, 0, 0x01, 0]))[:2] == [4, 5]
+
+
+# ---- diagnóstico ----
+from corsacan import diag, dtc
+
+
+def test_dtc_decode():
+    assert dtc.decode_dtc(0x01, 0x33) == "P0133"
+    assert dtc.decode_dtc(0xC1, 0x00) == "U0100"
+    assert dtc.decode_dtcs(bytes([0x43, 2, 0x01, 0x33, 0x04, 0x20]), True) == ["P0133", "P0420"]
+    assert dtc.decode_dtcs(bytes([0x43, 0x01, 0x33, 0, 0, 0, 0]), False) == ["P0133"]
+
+
+def test_kline_frames():
+    f = diag.kwp_frame(b"\x81")
+    assert f == bytes([0xC1, 0x33, 0xF1, 0x81, 0x66])
+    resp = bytes([0x84, 0xF1, 0x11, 0x41, 0x0D, 0x32]); resp += bytes([sum(resp) & 255])
+    assert diag.split_kline(resp) == [bytes([0x41, 0x0D, 0x32])]
+    r9 = bytes([0x48, 0x6B, 0x11, 0x41, 0x0C, 0x1A, 0xF8]); r9 += bytes([sum(r9) & 255])
+    assert diag.split_kline(r9) == [bytes([0x41, 0x0C, 0x1A, 0xF8])]
+
+
+class FakeBus:
+    def __init__(self, frames):
+        self.q, self.sent = list(frames), []
+    def send(self, m): self.sent.append(m)
+    def recv(self, t): return self.q.pop(0) if self.q else None
+
+
+def _msg(i, d):
+    import types
+    return types.SimpleNamespace(arbitration_id=i, data=bytes(d).ljust(8, b"\0"))
+
+
+def test_isotp_multiframe_and_clear():
+    pytest = __import__("pytest")
+    pytest.importorskip("can")
+    vin = b"VIN12345678901234"
+    body = bytes([0x49, 0x02, 0x01]) + vin
+    bus = FakeBus([_msg(0x7E8, [0x10, len(body)] + list(body[:6])),
+                   _msg(0x7E8, [0x21] + list(body[6:13])),
+                   _msg(0x7E8, [0x22] + list(body[13:]))])
+    assert diag.read_vin(diag.CanLink(bus)) == vin.decode()
+    assert bytes(bus.sent[1].data)[:3] == b"\x30\x00\x00"           # flow control enviado
+    bus = FakeBus([_msg(0x7E8, [1, 0x44])])
+    diag.clear_dtcs(diag.CanLink(bus))
+    assert bytes(bus.sent[0].data)[:2] == b"\x01\x04"

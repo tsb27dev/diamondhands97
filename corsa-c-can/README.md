@@ -31,3 +31,14 @@ corsacan correlate logs/demo.log logs/demo_rpm.csv
 
 ## Estrutura
 `corsacan/` código · `scripts/` SocketCAN e deteção de bitrate · `docs/` hardware + workflow · `signals/` definições JSON · `logs/` as tuas capturas (ignoradas pelo git)
+
+## Diagnóstico próprio (alternativa a uma Autel)
+```bash
+corsacan diag dtc    --link can                 # ler códigos (Mode 03); também: pending, permanent
+corsacan diag clear  --link can                 # mostra os códigos e pede confirmação antes de apagar
+corsacan diag live   --link can --pids 0x0C,0x0D,0x05
+corsacan diag vin    --link can
+# K-line (cabo FTDI):  pip install -e .[kline]
+corsacan diag dtc --link kline --port /dev/ttyUSB0 --init fast   # ou --init slow (ISO 9141)
+```
+Limites: só OBD-II **genérico** (ECU do motor). ABS, airbag, painel e códigos específicos Opel precisam de serviços proprietários (KWP/UDS) que teriam de ser descobertos por captura. O caminho K-line está testado só com frames simulados, **não em hardware real**.

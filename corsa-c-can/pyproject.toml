@@ -7,6 +7,7 @@ dependencies = []
 
 [project.optional-dependencies]
 live = ["python-can>=4.3"]
+kline = ["pyserial>=3.5"]
 dev = ["pytest"]
 
 [project.scripts]
