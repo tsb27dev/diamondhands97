@@ -1,49 +1,45 @@
-# Contexto para continuar noutro chat
+# Contexto para continuar noutro chat (atualizado 2026-11-15)
+
+Responder sempre em **pt-pt**.
 
 ## Objetivo do utilizador
-Descodificar o CAN bus do **Opel Corsa C 2006 1.3 CDTI** (motor Z13DT, Multijet/Magneti Marelli) e ter uma **alternativa própria a uma máquina de diagnóstico Autel** (ler/apagar DTCs, dados em tempo real). Responder sempre em **pt-pt**.
+Ferramenta **genérica, para qualquer carro**, para descodificar CAN bus / K-line e fazer **diagnóstico próprio** (ler/apagar DTCs, dados em tempo real) em alternativa a uma máquina Autel. O carro de referência é um **Opel Corsa C 2006 1.3 CDTI** (motor Z13DT, Multijet, ECU provavelmente Magneti Marelli).
 
-## Estado atual
-- Projeto Python em `corsa-c-can/` (repo `tsb27dev/diamondhands97`, branch `ccr-244dfc59-okq0hq`). Não foi possível criar repo novo no GitHub a partir da sessão; a pasta pode ser movida (`git subtree split -P corsa-c-can`).
-- **Ainda não há sinais reais descodificados**: não há logs do carro. 7 testes passam, só com dados sintéticos.
-- Nenhum PR criado (não foi pedido).
+## Repo
+- **Repo oficial: https://github.com/tsb27dev/carcan** (GPL-3.0-or-later). Branch `main`, tag **`v0.1.0`** (commit `84f5291`), CI verde (pytest + ruff em Python 3.10–3.13).
+- Local na sessão cloud: `/home/user/carcan` (pode já não existir). O Mac do utilizador: `/Users/tiagobastos/git`.
+- Os repos antigos `corsa-c-can/` (dentro de `tsb27dev/diamondhands97`, branch `ccr-244dfc59-okq0hq`) são **descartáveis**; o nome `diamondhands97` não faz sentido para o projeto.
+- Boas práticas já configuradas: Conventional Commits, SemVer, `CHANGELOG.md` (Keep a Changelog), `CONTRIBUTING.md`, templates de PR/issues, Dependabot (2 PRs abertos: `actions/checkout` 4→7 e `actions/setup-python` 5→7, CI verde, ainda por rever/fundir).
+- Branch protection na `main`: o utilizador estava a criar a regra (sugerido: nome `protect-main`, exigir PR + check `test`, histórico linear, approvals = 0).
 
-## O que existe no código (`corsacan/`)
-| Módulo | Função |
-|---|---|
-| `logparse.py` | lê `candump -L`, `candump -ta` e CSV |
-| `analyze.py` | stats por ID, deteção de contadores, `diff` de capturas, correlação com sinal de referência (ex.: RPM OBD) |
-| `signals.py` | sinais em JSON (convenção de bits DBC), decode, export `.dbc` |
-| `obd.py` | PIDs Mode 01, `decode_payload`, `scan` ao vivo |
-| `dtc.py` | descodificação de DTCs (P/C/B/U) |
-| `diag.py` | `CanLink` (ISO-TP) e `KLineLink` (ISO 14230 fast / ISO 9141 slow); ler/apagar DTC, PIDs live, VIN |
-| `cli.py` | comandos: `stats diff correlate decode obd-csv dbc obd-scan diag` |
+## Estrutura do código (`carcan/`)
+`logparse.py` (candump -L/-ta, CSV) · `analyze.py` (stats, contadores, diff, correlação) · `signals.py` (JSON → decode/.dbc) · `obd.py` (PIDs Mode 01) · `dtc.py` · `diag.py` (`CanLink` ISO-TP, `KLineLink` ISO 14230/9141) · `cli.py`.
+Perfis por veículo em `profiles/<marca>-<modelo>-<ano>-<motor>/` (primeiro: Opel Corsa C, **sem sinais confirmados**, só placeholder).
+Comando: `carcan stats|diff|correlate|decode|obd-csv|dbc|obd-scan|diag`.
 
-Scripts: `scripts/setup_socketcan.sh` (listen-only), `scripts/probe_bitrate.sh`. Docs: `docs/01-hardware-e-bus.md`, `docs/02-workflow-reverse-engineering.md`.
+## Limites / honestidade
+- **Nada foi testado em carro real.** 8 testes com dados sintéticos. O caminho **K-line** é o menos fiável (init fast/slow por validar em hardware).
+- **Protocolo do Corsa por confirmar**: o Corsa C pode ter só K-line (pino 7) na ficha OBD. A Autel funciona no carro, mas o protocolo não foi registado (ver "Protocolo" no ecrã do scanner, ou medir ~60 Ω entre pinos 6 e 14).
+- `diag` só faz OBD-II **genérico** (motor). ABS/airbag/painel exigem serviços proprietários (a descobrir por captura).
+- Decisão: **não implementar flash/remap de ECU** (risco de brickar, seed/key, checksums, implicações legais/emissões).
+- `diag clear` pede confirmação e avisa que repõe monitores de prontidão.
+- Esta sessão **não consegue criar repos** nem fazer push para `main`/tags (403): só para o branch da sessão. A `main` e a tag foram criadas via API/UI pelo utilizador.
 
-## Limites conhecidos / honestidade
-- **Não se sabe se o Corsa C tem CAN na ficha OBD** (pinos 6/14). Pode ser só **K-line** (pino 7). Verificar: na Autel, ver "Protocolo" (ISO 15765 = CAN; ISO 14230/9141 = K-line) ou medir ~60 Ω entre pinos 6 e 14.
-- O caminho **K-line nunca foi testado em hardware** (só frames simulados). O init (fast/slow) é o ponto mais provável de precisar de ajuste. Nota: o byte de formato KWP para endereço funcional 0x33 é `0xC0|len` (frame canónico `C1 33 F1 81 66`).
-- `diag` só faz **OBD-II genérico** (ECU motor). ABS/airbag/painel e códigos Opel específicos exigem serviços proprietários (a descobrir por captura).
-- Decisão tomada: **não implementar flash/remap de ECU** (risco de brickar, seed/key, checksums, implicações legais/emissões). Se o utilizador quiser afinar, indicar preparador com bancada.
-- Clear DTC pede confirmação e avisa que repõe monitores de prontidão.
-
-## Hardware recomendado (conforme protocolo)
-- **CAN:** CANable 2.0 (firmware candleLight/gs_usb, ~25–40 €); alternativa Raspberry Pi + MCP2515. Não usar ELM327 barato para sniffing.
-- **K-line:** cabo FTDI K-line (~10 €). O Pi com MCP2515 **não serve** para K-line.
-- Primeira captura sempre em **listen-only**.
+## Hardware
+- **CAN:** CANable 2.0 (candleLight/gs_usb, ~25–40 €) ou Raspberry Pi + MCP2515. Evitar ELM327 baratos para sniffing. Primeira captura sempre em **listen-only**.
+- **K-line:** cabo FTDI K-line (~10 €). O Pi com MCP2515 **não** serve para K-line.
 
 ## Próximos passos
-1. Utilizador confirma o protocolo na Autel (CAN vs K-line) e compra o adaptador certo.
-2. `corsacan diag dtc --link can|kline` e partilhar resultado/erro para afinar o código.
-3. Se houver CAN: fazer as capturas de `docs/02-...` (idle, luzes, piscas, travão, rpm) e correr `stats`, `diff`, `correlate`; preencher `signals/corsa_c.json`.
-4. Mandar os `.log` para o assistente descodificar sinais.
+1. Confirmar protocolo na Autel (CAN vs K-line) e comprar o adaptador certo.
+2. `carcan diag dtc --link can|kline` e partilhar resultado/erro para afinar o código.
+3. Se houver CAN: capturas de `docs/02-workflow-reverse-engineering.md` (idle, luzes, piscas, travão, rpm) → `stats`, `diff`, `correlate` → preencher `profiles/opel-corsa-c-2006-1.3-cdti/signals.json`.
+4. Rever/fundir os PRs do Dependabot; ativar branch protection.
+5. Releases futuras: atualizar `CHANGELOG.md` e versão (`pyproject.toml` + `carcan/__init__.py`), commit `chore(release): X.Y.Z`, tag anotada.
 
 ## Comandos úteis
 ```bash
-pip install -e .[dev,live,kline] && pytest
-corsacan stats logs/idle.log
-corsacan diff logs/lights_off.log logs/lights_on.log
-corsacan correlate logs/drive.log logs/rpm_ref.csv
-corsacan diag dtc --link kline --port /dev/ttyUSB0 --init fast
+git clone https://github.com/tsb27dev/carcan.git && cd carcan
+pip install -e .[dev,live,kline] && pytest && ruff check .
+carcan stats logs/idle.log
+carcan diag dtc --link kline --port /dev/ttyUSB0 --init fast
 ```
